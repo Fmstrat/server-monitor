@@ -9,6 +9,8 @@ import datetime
 import re
 import httplib
 import urllib
+import os
+import distutils.spawn
 
 def printD(string, indent):
     strindent = ""
@@ -32,63 +34,100 @@ requiredArguments = parser.add_argument_group('required arguments')
 requiredArguments.add_argument('-s', '--smtpserver', help='The SMTP server:port', required=True)
 requiredArguments.add_argument('-f', '--smtpfrom', help='The FROM email address', required=True)
 requiredArguments.add_argument('-k', '--smtpto', help='The TO email address', required=True)
-requiredArguments.add_argument('-m', '--monitor', nargs='+', help='The servers to monitor. Format: "<server>:<port> <server>:<port>"', required=True)
+requiredArguments.add_argument('-m', '--monitor', nargs='+', help='The servers to monitor. Format: "<server>:<port> <server>:<port>:udp"', required=True)
 args = parser.parse_args()
 
+def isIP(s):
+    a = s.split('.')
+    if len(a) != 4:
+        return False
+    for x in a:
+        if not x.isdigit():
+            return False
+        i = int(x)
+        if i < 0 or i > 255:
+            return False
+    return True
 
-def isOpen(ip, port):
-	s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-	s.settimeout(timeout)
-	try:
-		s.connect((ip, int(port)))
-		s.shutdown(socket.SHUT_RDWR)
-		return True
-	except:
-		return False
-	finally:
-		s.close()
+def tcpCheck(ip, port):
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    s.settimeout(timeout)
+    try:
+        s.connect((ip, int(port)))
+        s.shutdown(socket.SHUT_RDWR)
+        return True
+    except:
+        return False
+    finally:
+        s.close()
 
-def checkHost(ip, port):
-	ipup = False
-	for i in range(retry):
-		if isOpen(ip, port):
-			ipup = True
-			break
-		else:
-                        printD("Not responding, retrying in " + str(delay) + "s...",2)
-			time.sleep(delay)
-	return ipup
+def udpCheck(ip, port):
+    host = ip
+    if not isIP(ip):
+        host = socket.gethostbyname(ip)
+    res = os.system("nc -vnzu " + host + " " + str(port) + " > /dev/null 2>&1")
+    if res == 0:
+        return True
+    else:
+        return False
+
+def checkHost(ip, port, conntype):
+    ipup = False
+    for i in range(retry):
+        if conntype == "udp":
+            if udpCheck(ip, port):
+                ipup = True
+                break
+            else:
+                printD("Not responding, retrying in " + str(delay) + "s...",2)
+                time.sleep(delay)
+        else:
+            if tcpCheck(ip, port):
+                ipup = True
+                break
+            else:
+                printD("Not responding, retrying in " + str(delay) + "s...",2)
+                time.sleep(delay)
+    return ipup
+
+nc = distutils.spawn.find_executable("nc")
+if not nc:
+    printD("Missing `nc`. Exiting",0)
+    sys.exit()
 
 retry = args.retry
 delay = args.delay
 timeout = args.timeout
 while True:
-	for host in args.monitor:
-		ipport = re.split('[:]', host)
-		ip = ipport[0]
-		port = int(ipport[1])
-		printD("Checking " + ip + ":" + str(port), 0)
-		if checkHost(ip, port):
-			printD("Up", 2)
-		else:
-			printD("Down", 2)
-			message = "Subject: " + args.smtpsubject + "\n\n"
-			message = message + ip + ":" + str(port) + " is down."
-			server = smtplib.SMTP(args.smtpserver)
-			server.starttls()
-			if args.smtpuser != '' and args.smtppass != '':
-				server.login(args.smtpuser, args.smtppass)
-			server.sendmail(args.smtpfrom, args.smtpto, message)
-			server.quit()
-                        if args.pushoverapi != '' and args.pushoveruser != '':
-                            conn = httplib.HTTPSConnection("api.pushover.net:443")
-                            conn.request("POST", "/1/messages.json",
-                                urllib.urlencode({
-                                    "token": args.pushoverapi,
-                                    "user": args.pushoveruser,
-                                    "message": message,
-                                    "sound": "falling",
-                                }), { "Content-type": "application/x-www-form-urlencoded" })
-                            conn.getresponse()
-	printD("Waiting " + str(args.interval) + " minutes for next check.", 0)
-	time.sleep(args.interval * 60)
+    for host in args.monitor:
+        conntype = "tcp"
+        ipport = re.split('[:]', host)
+        ip = ipport[0]
+        port = int(ipport[1])
+        if len(ipport) > 2:
+            conntype = ipport[2]
+        printD("Checking " + ip + ":" + str(port) + ":" + conntype, 0)
+        if checkHost(ip, port, conntype):
+            printD("Up", 2)
+        else:
+            printD("Down", 2)
+            message = "Subject: " + args.smtpsubject + "\n\n"
+            message = message + ip + ":" + str(port) + " is down."
+            server = smtplib.SMTP(args.smtpserver)
+            server.starttls()
+            if args.smtpuser != '' and args.smtppass != '':
+                server.login(args.smtpuser, args.smtppass)
+            server.sendmail(args.smtpfrom, args.smtpto, message)
+            server.quit()
+            if args.pushoverapi != '' and args.pushoveruser != '':
+                conn = httplib.HTTPSConnection("api.pushover.net:443")
+                conn.request("POST", "/1/messages.json",
+                    urllib.urlencode({
+                        "token": args.pushoverapi,
+                        "user": args.pushoveruser,
+                        "message": message,
+                        "sound": "falling",
+                    }), { "Content-type": "application/x-www-form-urlencoded" })
+                conn.getresponse()
+    printD("Waiting " + str(args.interval) + " minutes for next check.", 0)
+    time.sleep(args.interval * 60)
