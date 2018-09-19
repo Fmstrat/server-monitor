@@ -19,6 +19,9 @@ optional arguments:
   -r RETRY, --retry RETRY                                    The retry count when a connection fails (default 5)
   -d DELAY, --delay DELAY                                    The retry delay in seconds when a connection fails (default 10)
   -t TIMEOUT, --timeout TIMEOUT                              The connection timeout in seconds (default 3)
+  -y PUSHOVERAPI, --pushoverapi PUSHOVERAPI                  The pushover.net API key
+  -z PUSHOVERUSER, --pushoveruser PUSHOVERUSER               The pushover.net user key
+
 
 required arguments:
   -s SMTPSERVER, --smtpserver SMTPSERVER                     The SMTP server:port

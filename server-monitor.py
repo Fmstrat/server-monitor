@@ -7,7 +7,8 @@ import argparse
 import time
 import datetime
 import re
-
+import httplib
+import urllib
 
 def printD(string, indent):
     strindent = ""
@@ -25,6 +26,8 @@ parser.add_argument('-o', '--interval', help='The interval in minutes between ch
 parser.add_argument('-r', '--retry', help='The retry count when a connection fails (default 5)', default=5, type=int)
 parser.add_argument('-d', '--delay', help='The retry delay in seconds when a connection fails (default 10)', default=10, type=int)
 parser.add_argument('-t', '--timeout', help='The connection timeout in seconds (default 3)', default=3, type=int)
+parser.add_argument('-y', '--pushoverapi', help='The pushover.net API key', default='')
+parser.add_argument('-z', '--pushoveruser', help='The pushover.net user key', default='')
 requiredArguments = parser.add_argument_group('required arguments')
 requiredArguments.add_argument('-s', '--smtpserver', help='The SMTP server:port', required=True)
 requiredArguments.add_argument('-f', '--smtpfrom', help='The FROM email address', required=True)
@@ -77,5 +80,15 @@ while True:
 				server.login(args.smtpuser, args.smtppass)
 			server.sendmail(args.smtpfrom, args.smtpto, message)
 			server.quit()
+                        if args.pushoverapi != '' and args.pushoveruser != '':
+                            conn = httplib.HTTPSConnection("api.pushover.net:443")
+                            conn.request("POST", "/1/messages.json",
+                                urllib.urlencode({
+                                    "token": args.pushoverapi,
+                                    "user": args.pushoveruser,
+                                    "message": message,
+                                    "sound": "falling",
+                                }), { "Content-type": "application/x-www-form-urlencoded" })
+                            conn.getresponse()
 	printD("Waiting " + str(args.interval) + " minutes for next check.", 0)
 	time.sleep(args.interval * 60)
