@@ -37,18 +37,6 @@ requiredArguments.add_argument('-k', '--smtpto', help='The TO email address', re
 requiredArguments.add_argument('-m', '--monitor', nargs='+', help='The servers to monitor. Format: "<server>:<port> <server>:<port>:udp"', required=True)
 args = parser.parse_args()
 
-def isIP(s):
-    a = s.split('.')
-    if len(a) != 4:
-        return False
-    for x in a:
-        if not x.isdigit():
-            return False
-        i = int(x)
-        if i < 0 or i > 255:
-            return False
-    return True
-
 def tcpCheck(ip, port):
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     s.settimeout(timeout)
@@ -62,11 +50,9 @@ def tcpCheck(ip, port):
         s.close()
 
 def udpCheck(ip, port):
-    host = ip
-    if not isIP(ip):
-        host = socket.gethostbyname(ip)
-    res = os.system("nc -vnzu " + host + " " + str(port) + " > /dev/null 2>&1")
-    if res == 0:
+    cmd = "nc -vzu -w " + str(timeout) + " " + ip + " " + str(port) + " 2>&1"
+    res = os.popen('DATA=$('+cmd+');echo -n $DATA').read()
+    if res != "":
         return True
     else:
         return False
@@ -95,6 +81,7 @@ if not nc:
     printD("Missing `nc`. Exiting",0)
     sys.exit()
 
+failures = []
 retry = args.retry
 delay = args.delay
 timeout = args.timeout
@@ -111,23 +98,26 @@ while True:
             printD("Up", 2)
         else:
             printD("Down", 2)
-            message = "Subject: " + args.smtpsubject + "\n\n"
-            message = message + ip + ":" + str(port) + " is down."
-            server = smtplib.SMTP(args.smtpserver)
-            server.starttls()
-            if args.smtpuser != '' and args.smtppass != '':
-                server.login(args.smtpuser, args.smtppass)
-            server.sendmail(args.smtpfrom, args.smtpto, message)
-            server.quit()
-            if args.pushoverapi != '' and args.pushoveruser != '':
-                conn = httplib.HTTPSConnection("api.pushover.net:443")
-                conn.request("POST", "/1/messages.json",
-                    urllib.urlencode({
-                        "token": args.pushoverapi,
-                        "user": args.pushoveruser,
-                        "message": message,
-                        "sound": "falling",
-                    }), { "Content-type": "application/x-www-form-urlencoded" })
-                conn.getresponse()
+            failures.append(ip + ":" + str(port) + ":" + conntype)
+    if len(failures) > 0:
+        message = "Subject: " + args.smtpsubject + "\n\n"
+        for failure in failures:
+            message = message + failure + " is down.\n"
+        server = smtplib.SMTP(args.smtpserver)
+        server.starttls()
+        if args.smtpuser != '' and args.smtppass != '':
+            server.login(args.smtpuser, args.smtppass)
+        server.sendmail(args.smtpfrom, args.smtpto, message)
+        server.quit()
+        if args.pushoverapi != '' and args.pushoveruser != '':
+            conn = httplib.HTTPSConnection("api.pushover.net:443")
+            conn.request("POST", "/1/messages.json",
+                urllib.urlencode({
+                    "token": args.pushoverapi,
+                    "user": args.pushoveruser,
+                    "message": message,
+                    "sound": "falling",
+                }), { "Content-type": "application/x-www-form-urlencoded" })
+            conn.getresponse()
     printD("Waiting " + str(args.interval) + " minutes for next check.", 0)
     time.sleep(args.interval * 60)
