@@ -3,7 +3,7 @@ Checks if ips:ports are up and running.
 
 ## Usage
 ```
-# wget https://raw.githubusercontent.com/Fmstrat/server-monitor/master/server-check.py
+# wget https://raw.githubusercontent.com/Fmstrat/server-monitor/master/server-monitor.py
 # ./server-monitor.py --help
 usage: server-monitor.py [-h] [-u SMTPUSER] [-p SMTPPASS] [-l SMTPSUBJECT] [-o INTERVAL] [-r RETRY] [-d DELAY] [-t TIMEOUT] -s SMTPSERVER -f SMTPFROM
                          -k SMTPTO -m MONITOR [MONITOR ...]
