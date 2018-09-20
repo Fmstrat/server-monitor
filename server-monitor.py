@@ -23,8 +23,8 @@ parser = argparse.ArgumentParser(
     formatter_class=lambda prog: argparse.HelpFormatter(prog,max_help_position=150, width=150))
 parser.add_argument('-u', '--smtpuser', help='The SMTP username', default='')
 parser.add_argument('-p', '--smtppass', help='The SMTP password', default='')
-parser.add_argument('-l', '--smtpsubject', help='The SMTP subject line', default='A service is down!')
-parser.add_argument('-o', '--interval', help='The interval in minutes between checks (default 60)', default=60, type=int)
+parser.add_argument('-l', '--smtpsubject', help='The SMTP subject line', default='Service status changed!')
+parser.add_argument('-o', '--interval', help='The interval in minutes between checks (default 15)', default=15, type=int)
 parser.add_argument('-r', '--retry', help='The retry count when a connection fails (default 5)', default=5, type=int)
 parser.add_argument('-d', '--delay', help='The retry delay in seconds when a connection fails (default 10)', default=10, type=int)
 parser.add_argument('-t', '--timeout', help='The connection timeout in seconds (default 3)', default=3, type=int)
@@ -76,48 +76,63 @@ def checkHost(ip, port, conntype):
                 time.sleep(delay)
     return ipup
 
+def sendMessage():
+    printD("Sending SMTP message",2)
+    message = args.smtpsubject + "\n\n"
+    for change in changes:
+        message = message + change + ".\n"
+    server = smtplib.SMTP(args.smtpserver)
+    server.starttls()
+    if args.smtpuser != '' and args.smtppass != '':
+        server.login(args.smtpuser, args.smtppass)
+    server.sendmail(args.smtpfrom, args.smtpto, "Subject: " + message)
+    server.quit()
+    if args.pushoverapi != '' and args.pushoveruser != '':
+        printD("Sending Pushover message",2)
+        conn = httplib.HTTPSConnection("api.pushover.net:443")
+        conn.request("POST", "/1/messages.json",
+            urllib.urlencode({
+                "token": args.pushoverapi,
+                "user": args.pushoveruser,
+                "message": message,
+                "sound": "falling",
+            }), { "Content-type": "application/x-www-form-urlencoded" })
+        conn.getresponse()
+
 nc = distutils.spawn.find_executable("nc")
 if not nc:
     printD("Missing `nc`. Exiting",0)
     sys.exit()
 
-failures = []
 retry = args.retry
 delay = args.delay
 timeout = args.timeout
+changes = []
+hosts = []
+for host in args.monitor:
+    conntype = "tcp"
+    ipport = re.split('[:]', host)
+    ip = ipport[0]
+    port = int(ipport[1])
+    if len(ipport) > 2:
+        conntype = ipport[2]
+    hosts.append({"ip":ip, "port":port, "conntype":conntype, "status":"unknown"})
+
 while True:
-    for host in args.monitor:
-        conntype = "tcp"
-        ipport = re.split('[:]', host)
-        ip = ipport[0]
-        port = int(ipport[1])
-        if len(ipport) > 2:
-            conntype = ipport[2]
-        printD("Checking " + ip + ":" + str(port) + ":" + conntype, 0)
-        if checkHost(ip, port, conntype):
-            printD("Up", 2)
+    for host in hosts:
+        prestatus = host["status"]
+        printD("Checking " + host["ip"] + ":" + str(host["port"]) + ":" + host["conntype"], 0)
+        if checkHost(host["ip"], host["port"], host["conntype"]):
+            host["status"] = "up"
+            if prestatus == "down":
+                changes.append(host["ip"] + ":" + str(host["port"]) + ":" + host["conntype"] + " is " + host["status"])
         else:
-            printD("Down", 2)
-            failures.append(ip + ":" + str(port) + ":" + conntype)
-    if len(failures) > 0:
-        message = "Subject: " + args.smtpsubject + "\n\n"
-        for failure in failures:
-            message = message + failure + " is down.\n"
-        server = smtplib.SMTP(args.smtpserver)
-        server.starttls()
-        if args.smtpuser != '' and args.smtppass != '':
-            server.login(args.smtpuser, args.smtppass)
-        server.sendmail(args.smtpfrom, args.smtpto, message)
-        server.quit()
-        if args.pushoverapi != '' and args.pushoveruser != '':
-            conn = httplib.HTTPSConnection("api.pushover.net:443")
-            conn.request("POST", "/1/messages.json",
-                urllib.urlencode({
-                    "token": args.pushoverapi,
-                    "user": args.pushoveruser,
-                    "message": message,
-                    "sound": "falling",
-                }), { "Content-type": "application/x-www-form-urlencoded" })
-            conn.getresponse()
+            host["status"] = "down"
+            if prestatus == "up":
+                changes.append(host["ip"] + ":" + str(host["port"]) + ":" + host["conntype"] + " is " + host["status"])
+        printD(host["status"], 2)
+        if len(changes) > 0:
+            sendMessage()
+            del changes[:]
     printD("Waiting " + str(args.interval) + " minutes for next check.", 0)
     time.sleep(args.interval * 60)
