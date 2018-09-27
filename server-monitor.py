@@ -131,8 +131,8 @@ while True:
             if prestatus == "up":
                 changes.append(host["ip"] + ":" + str(host["port"]) + ":" + host["conntype"] + " is " + host["status"])
         printD(host["status"], 2)
-        if len(changes) > 0:
-            sendMessage()
-            del changes[:]
+    if len(changes) > 0:
+        sendMessage()
+        del changes[:]
     printD("Waiting " + str(args.interval) + " minutes for next check.", 0)
     time.sleep(args.interval * 60)
