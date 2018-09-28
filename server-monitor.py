@@ -11,6 +11,8 @@ import httplib
 import urllib
 import os
 import distutils.spawn
+import threading
+import time
 
 def printD(string, indent):
     strindent = ""
@@ -57,22 +59,22 @@ def udpCheck(ip, port):
     else:
         return False
 
-def checkHost(ip, port, conntype):
+def checkHost(host):
     ipup = False
     for i in range(retry):
-        if conntype == "udp":
-            if udpCheck(ip, port):
+        if host["conntype"] == "udp":
+            if udpCheck(host["ip"], host["port"]):
                 ipup = True
                 break
             else:
-                printD("Not responding, retrying in " + str(delay) + "s...",2)
+                printD("No response from " + host["ip"] + ":" + str(host["port"]) + ":" + host["conntype"] + ", retrying in " + str(delay) + "s...", 0)
                 time.sleep(delay)
         else:
-            if tcpCheck(ip, port):
+            if tcpCheck(host["ip"], host["port"]):
                 ipup = True
                 break
             else:
-                printD("Not responding, retrying in " + str(delay) + "s...",2)
+                printD("No response from " + host["ip"] + ":" + str(host["port"]) + ":" + host["conntype"] + ", retrying in " + str(delay) + "s...", 0)
                 time.sleep(delay)
     return ipup
 
@@ -99,6 +101,19 @@ def sendMessage():
             }), { "Content-type": "application/x-www-form-urlencoded" })
         conn.getresponse()
 
+def parseHost(host):
+    prestatus = host["status"]
+    printD("Checking " + host["ip"] + ":" + str(host["port"]) + ":" + host["conntype"] + "...", 0)
+    if checkHost(host):
+        host["status"] = "up"
+        if prestatus == "down":
+            changes.append(host["ip"] + ":" + str(host["port"]) + ":" + host["conntype"] + " is " + host["status"])
+    else:
+        host["status"] = "down"
+        if prestatus == "up":
+            changes.append(host["ip"] + ":" + str(host["port"]) + ":" + host["conntype"] + " is " + host["status"])
+    printD("Status of " + host["ip"] + ":" + str(host["port"]) + ":" + host["conntype"] + ": " + host["status"], 0)
+
 nc = distutils.spawn.find_executable("nc")
 if not nc:
     printD("Missing `nc`. Exiting",0)
@@ -107,7 +122,6 @@ if not nc:
 retry = args.retry
 delay = args.delay
 timeout = args.timeout
-changes = []
 hosts = []
 for host in args.monitor:
     conntype = "tcp"
@@ -119,20 +133,18 @@ for host in args.monitor:
     hosts.append({"ip":ip, "port":port, "conntype":conntype, "status":"unknown"})
 
 while True:
+    changes = []
+    threads = []
     for host in hosts:
-        prestatus = host["status"]
-        printD("Checking " + host["ip"] + ":" + str(host["port"]) + ":" + host["conntype"], 0)
-        if checkHost(host["ip"], host["port"], host["conntype"]):
-            host["status"] = "up"
-            if prestatus == "down":
-                changes.append(host["ip"] + ":" + str(host["port"]) + ":" + host["conntype"] + " is " + host["status"])
-        else:
-            host["status"] = "down"
-            if prestatus == "up":
-                changes.append(host["ip"] + ":" + str(host["port"]) + ":" + host["conntype"] + " is " + host["status"])
-        printD(host["status"], 2)
+        t = threading.Thread(target=parseHost, args=(host,))
+        threads.append(t)
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
     if len(changes) > 0:
         sendMessage()
         del changes[:]
+    del threads[:]
     printD("Waiting " + str(args.interval) + " minutes for next check.", 0)
     time.sleep(args.interval * 60)
