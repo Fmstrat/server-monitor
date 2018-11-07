@@ -80,14 +80,17 @@ def checkHost(host):
 
 def sendMessage():
     printD("Sending SMTP message",2)
-    message = args.smtpsubject + "\n\n"
+    message = "Subject: " + args.smtpsubject + "\r\n"
+    message += "From: " + args.smtpfrom + "\r\n"
+    message += "To: " + args.smtpto + "\r\n"
+    message += "\r\n"
     for change in changes:
-        message = message + change + ".\n"
+        message += change + ".\r\n"
     server = smtplib.SMTP(args.smtpserver)
     server.starttls()
     if args.smtpuser != '' and args.smtppass != '':
         server.login(args.smtpuser, args.smtppass)
-    server.sendmail(args.smtpfrom, args.smtpto, "Subject: " + message)
+    server.sendmail(args.smtpfrom, args.smtpto, message)
     server.quit()
     if args.pushoverapi != '' and args.pushoveruser != '':
         printD("Sending Pushover message",2)
