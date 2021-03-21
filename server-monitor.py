@@ -23,6 +23,9 @@ def printD(string, indent):
 parser = argparse.ArgumentParser(
     description='Check if hosts are up.',
     formatter_class=lambda prog: argparse.HelpFormatter(prog,max_help_position=150, width=150))
+parser.add_argument('-s', '--smtpserver', help='The SMTP server:port', default='')
+parser.add_argument('-f', '--smtpfrom', help='The FROM email address', default='')
+parser.add_argument('-k', '--smtpto', help='The TO email address', default='')
 parser.add_argument('-u', '--smtpuser', help='The SMTP username', default='')
 parser.add_argument('-p', '--smtppass', help='The SMTP password', default='')
 parser.add_argument('-l', '--smtpsubject', help='The SMTP subject line', default='Service status changed!')
@@ -33,9 +36,6 @@ parser.add_argument('-t', '--timeout', help='The connection timeout in seconds (
 parser.add_argument('-y', '--pushoverapi', help='The pushover.net API key', default='')
 parser.add_argument('-z', '--pushoveruser', help='The pushover.net user key', default='')
 requiredArguments = parser.add_argument_group('required arguments')
-requiredArguments.add_argument('-s', '--smtpserver', help='The SMTP server:port', required=True)
-requiredArguments.add_argument('-f', '--smtpfrom', help='The FROM email address', required=True)
-requiredArguments.add_argument('-k', '--smtpto', help='The TO email address', required=True)
 requiredArguments.add_argument('-m', '--monitor', nargs='+', help='The servers to monitor. Format: "<server>:<port> <server>:<port>:udp"', required=True)
 args = parser.parse_args()
 
@@ -79,19 +79,20 @@ def checkHost(host):
     return ipup
 
 def sendMessage():
-    printD("Sending SMTP message",2)
     message = "Subject: " + args.smtpsubject + "\r\n"
     message += "From: " + args.smtpfrom + "\r\n"
     message += "To: " + args.smtpto + "\r\n"
     message += "\r\n"
     for change in changes:
         message += change + ".\r\n"
-    server = smtplib.SMTP(args.smtpserver)
-    server.starttls()
-    if args.smtpuser != '' and args.smtppass != '':
-        server.login(args.smtpuser, args.smtppass)
-    server.sendmail(args.smtpfrom, args.smtpto, message)
-    server.quit()
+    if args.smtpserver != '' and args.smtpfrom != '' and args.smtpto != '':
+        printD("Sending SMTP message",2)
+        server = smtplib.SMTP(args.smtpserver)
+        server.starttls()
+        if args.smtpuser != '' and args.smtppass != '':
+            server.login(args.smtpuser, args.smtppass)
+        server.sendmail(args.smtpfrom, args.smtpto, message)
+        server.quit()
     if args.pushoverapi != '' and args.pushoveruser != '':
         printD("Sending Pushover message",2)
         conn = httplib.HTTPSConnection("api.pushover.net:443")

@@ -12,6 +12,9 @@ Check if hosts are up.
 
 optional arguments:
   -h, --help                                                 show this help message and exit
+  -s SMTPSERVER, --smtpserver SMTPSERVER                     The SMTP server:port
+  -f SMTPFROM, --smtpfrom SMTPFROM                           The FROM email address
+  -k SMTPTO, --smtpto SMTPTO                                 The TO email address
   -u SMTPUSER, --smtpuser SMTPUSER                           The SMTP username
   -p SMTPPASS, --smtppass SMTPPASS                           The SMTP password
   -l SMTPSUBJECT, --smtpsubject SMTPSUBJECT                  The SMTP subject line
@@ -24,9 +27,6 @@ optional arguments:
 
 
 required arguments:
-  -s SMTPSERVER, --smtpserver SMTPSERVER                     The SMTP server:port
-  -f SMTPFROM, --smtpfrom SMTPFROM                           The FROM email address
-  -k SMTPTO, --smtpto SMTPTO                                 The TO email address
   -m MONITOR [MONITOR ...], --monitor MONITOR [MONITOR ...]  The servers to monitor. Format: "<server>:<port> <server>:<port>"
 ```
 
